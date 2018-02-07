@@ -1,7 +1,7 @@
 # dos-dss-lambda
 
 This presents an [Amazon Lambda](https://aws.amazon.com/lambda/) microservice
-following the [Data Object Service](https://github.com/ga4gh/data-object-service-schemas).
+following the [Data Object Service](https://github.com/ga4gh/data-object-service-schemas) ([view the OpenAPI description](https://ga4gh.github.io/data-object-service-schemas/)!).
 It allows data in the [Human Cell Atlas Data Store](https://github.com/HumanCellAtlas/data-store)
 to be accessed using Data Object Service APIs.
 
