@@ -38,7 +38,8 @@ def make_urls(object_id, path):
     """
     replicas = ['aws', 'azure']
     urls = map(
-        lambda replica: {'url' : '{}/{}/{}?replica={}'.format(DSS_URL, path, object_id, replica)},
+        lambda replica: {'url' : '{}/{}/{}?replica={}'.format(
+            DSS_URL, path, object_id, replica)},
         replicas)
     return urls
 
@@ -115,21 +116,32 @@ def list_data_bundles():
     if req_body and (req_body.get('page_token', None)):
         page_token = req_body.get('page_token')
     if page_token:
-        res = requests.post("{}/search?replica=aws&per_page={}&_scroll_id={}".format(DSS_URL, per_page, page_token), json={'es_query': {}})
+        res = requests.post(
+            "{}/search?replica=aws&per_page={}&_scroll_id={}".format(
+                DSS_URL, per_page, page_token), json={'es_query': {}})
     else:
-        res = requests.post("{}/search?replica=aws&per_page={}".format(DSS_URL, per_page), json={'es_query': {}})
+        res = requests.post(
+            "{}/search?replica=aws&per_page={}".format(
+                DSS_URL, per_page), json={'es_query': {}})
     # We need to page using the github style
     if res.links.get('next', None):
         try:
+            # first _scroll_id item of the query string in the link
+            # header of the response
             next_page_token = urlparse.parse_qs(
-                urlparse.urlparse(res.links['next']['url']).query)['_scroll_id']
+                urlparse.urlparse(
+                    res.links['next']['url']).query)['_scroll_id'][0]
         except Exception as e:
             print(e)
     # And convert the fqid message into a DOS id and version
     response = {}
     response['next_page_token'] = next_page_token
-    response['data_bundles'] = map(dss_list_bundle_to_dos, res.json()['results'])
-    return response
+    try:
+        response['data_bundles'] = map(dss_list_bundle_to_dos, res.json()['results'])
+    except Exception as e:
+        response = e
+    finally:
+        return response
 
 @app.route('/ga4gh/dos/v1/databundles/{data_bundle_id}', methods=['GET'], cors=True)
 def get_data_bundle(data_bundle_id):
@@ -143,10 +155,12 @@ def get_data_bundle(data_bundle_id):
     if app.current_request.query_params:
         version = app.current_request.query_params.get('version', None)
     if version:
-        res = requests.get("{}/bundles/{}?replica=aws&version={}".format(DSS_URL, data_bundle_id, version)).json()
+        res = requests.get("{}/bundles/{}?replica=aws&version={}".format(
+            DSS_URL, data_bundle_id, version)).json()
     else:
-        res = requests.get("{}/bundles/{}?replica=aws".format(DSS_URL, data_bundle_id)).json()
-    return dss_bundle_to_dos(res['bundle'])
+        res = requests.get(
+            "{}/bundles/{}?replica=aws".format(DSS_URL, data_bundle_id)).json()
+    return {'data_bundle': dss_bundle_to_dos(res['bundle'])}
 
 
 
