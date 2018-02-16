@@ -15,7 +15,74 @@ DSS_URL = "https://commons-dss.ucsc-cgp-dev.org/v1"
 
 app = Chalice(app_name='dos-indexd-lambda', debug=True)
 app.log.setLevel(logging.DEBUG)
-##
+
+
+def dss_file_to_dos(data_object_id, dss_file):
+    """
+    Converts a DSS file header into a Data Object.
+
+    List of headers
+
+    ['Content-Type', 'Content-Length', 'Connection', 'Date',
+     'x-amzn-RequestId', 'X-DSS-SHA1',
+     'Access-Control-Allow-Origin', 'X-DSS-S3-ETAG',
+     'X-DSS-SHA256', 'X-DSS-BUNDLE-UUID',
+     'Access-Control-Allow-Headers', 'X-DSS-CONTENT-TYPE',
+     'X-DSS-CRC32C', 'X-DSS-CREATOR-UID', 'X-DSS-VERSION',
+     'X-Amzn-Trace-Id', 'X-DSS-SIZE', 'X-Cache', 'Via',
+     'X-Amz-Cf-Id']
+
+    :param data_object_id:
+    :param dss_file:
+    :return:
+    """
+
+    data_object = {}
+    data_object['id'] = data_object_id
+    sha256 = {'checksum': dss_file.get('X-DSS-SHA256', None), 'type': 'sha256'}
+    etag = {'checksum': dss_file.get('X-DSS-S3-ETAG', None), 'type': 'etag'}
+    sha1 = {'checksum': dss_file.get('X-DSS-SHA1', None), 'type': 'sha1'}
+    crc32c = {'checksum': dss_file.get('X-DSS-CRC32C', None), 'type': 'crc32c'}
+    checksums = [sha256, etag, sha1, crc32c]
+    data_object['checksums'] = checksums
+    data_object['version'] = dss_file.get('X-DSS-VERSION', None)
+    data_object['content_type'] = dss_file.get('X-DSS-CONTENT-TYPE', None)
+    data_object['urls'] = make_urls(data_object_id, 'files')
+    return data_object
+
+
+def dss_list_bundle_to_dos(dss_bundle):
+    """
+    Converts a DSS bundle to DOS bundle messages by splitting the ID.
+
+    :param bundle_list:
+    :return:
+    """
+    dos_bundle = {}
+    dos_bundle['id'] = dss_bundle['bundle_fqid'].split('.')[0]
+    dos_bundle['version'] = dss_bundle['bundle_fqid'].split('.')[1]
+    # full_bundle = requests.get(
+    #     "{}/bundles/{}?replica=aws&version={}".format(
+    #         DSS_URL, dos_bundle['id'], dos_bundle['version'])).json()
+    # if full_bundle and full_bundle.get('files', None):
+    #     for file in full_bundle.get('files'):
+    #         dos_bundle['data_object_ids'].append(file['uuid'])
+    return dos_bundle
+
+def dss_bundle_to_dos(dss_bundle):
+    """
+    Converts a fully formatted DSS bundle into a DOS bundle.
+
+    :param dss_bundle:
+    :return:
+    """
+    dos_bundle = {}
+    dos_bundle['id'] = dss_bundle['uuid']
+    dos_bundle['version'] = dss_bundle['version']
+    dos_bundle['data_object_ids'] = [x['uuid'] for x in dss_bundle['files']]
+    return dos_bundle
+
+
 @app.route('/swagger.json', cors=True)
 def swagger():
     """
@@ -23,6 +90,7 @@ def swagger():
 
     :return:
     """
+    # FIXME replace with one hosted here
     req = requests.get("https://gist.githubusercontent.com/david4096/6dad2ea6a4ebcff8e0fe24c2210ae8ef/raw/55bf72546923c7bd9f63f3ea72d7441b0a506a76/data_object_service.gdc.swagger.json")
     swagger_dict = req.json()
     swagger_dict['basePath'] = '/api'
@@ -51,10 +119,8 @@ def get_data_object(data_object_id):
     :param data_object_id:
     :return:
     """
-    # DSS doesn't present much metadata around files so we give a simple response
-    data_object = {}
-    data_object['id'] = data_object_id
-    data_object['urls'] = make_urls(data_object_id, 'files')
+    dss_file = requests.head("{}/files/{}?replica=aws".format(DSS_URL, data_object_id)).headers
+    data_object = dss_file_to_dos(data_object_id, dss_file)
     return {'data_object': data_object}
 
 @app.route('/ga4gh/dos/v1/dataobjects/list', methods=['POST'], cors=True)
@@ -66,37 +132,6 @@ def list_data_objects():
     :return:
     """
     return Response(status_code=405)
-
-def dss_bundle_to_dos(dss_bundle):
-    """
-    Converts a fully formatted DSS bundle into a DOS bundle.
-
-    :param dss_bundle:
-    :return:
-    """
-    dos_bundle = {}
-    dos_bundle['id'] = dss_bundle['uuid']
-    dos_bundle['version'] = dss_bundle['version']
-    dos_bundle['data_object_ids'] = [x['uuid'] for x in dss_bundle['files']]
-    return dos_bundle
-
-def dss_list_bundle_to_dos(dss_bundle):
-    """
-    Converts a DSS bundle to DOS bundle messages by splitting the ID.
-
-    :param bundle_list:
-    :return:
-    """
-    dos_bundle = {}
-    dos_bundle['id'] = dss_bundle['bundle_fqid'].split('.')[0]
-    dos_bundle['version'] = dss_bundle['bundle_fqid'].split('.')[1]
-    # full_bundle = requests.get(
-    #     "{}/bundles/{}?replica=aws&version={}".format(
-    #         DSS_URL, dos_bundle['id'], dos_bundle['version'])).json()
-    # if full_bundle and full_bundle.get('files', None):
-    #     for file in full_bundle.get('files'):
-    #         dos_bundle['data_object_ids'].append(file['uuid'])
-    return dos_bundle
 
 
 @app.route('/ga4gh/dos/v1/databundles/list', methods=['POST'], cors=True)
