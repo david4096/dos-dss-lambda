@@ -9,7 +9,7 @@ import requests
 import urlparse
 import logging
 
-from chalice import Chalice, Response
+from chalice import Chalice, Response, NotFoundError
 
 DSS_URL = "https://commons-dss.ucsc-cgp-dev.org/v1"
 
@@ -104,7 +104,7 @@ def make_urls(object_id, path):
     :param path:
     :return:
     """
-    replicas = ['aws', 'azure']
+    replicas = ['aws', 'azure', 'gcp']
     urls = map(
         lambda replica: {'url' : '{}/{}/{}?replica={}'.format(
             DSS_URL, path, object_id, replica)},
@@ -119,8 +119,21 @@ def get_data_object(data_object_id):
     :param data_object_id:
     :return:
     """
-    dss_file = requests.head("{}/files/{}?replica=aws".format(DSS_URL, data_object_id)).headers
+    dss_response = requests.head("{}/files/{}?replica=aws".format(DSS_URL, data_object_id))
+    dss_file = dss_response.headers
+    if not dss_response.status_code == 200:
+        return Response({'msg': 'Data Object with data_object_id {} was not found.'.format(data_object_id)}, status_code=404)
     data_object = dss_file_to_dos(data_object_id, dss_file)
+    replicas = ['aws', 'azure', 'gcp']
+    for replica in replicas:
+        # TODO make async
+        try:
+            data_bundle = requests.get(
+                "{}/bundles/{}?replica={}&directurls=true".format(DSS_URL, dss_file['X-DSS-BUNDLE-UUID'], replica))
+            url = filter(lambda x: x['uuid'] == data_object_id, data_bundle.json()['bundle']['files'])[0]['url']
+            data_object['urls'].append({'url': url})
+        except Exception as e:
+            pass
     return {'data_object': data_object}
 
 @app.route('/ga4gh/dos/v1/dataobjects/list', methods=['POST'], cors=True)
