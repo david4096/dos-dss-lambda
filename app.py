@@ -6,10 +6,11 @@ to GA4GH messages.
 """
 
 import requests
+import yaml
 import urlparse
 import logging
 
-from chalice import Chalice, Response, NotFoundError
+from chalice import Chalice, Response
 
 DSS_URL = "https://commons-dss.ucsc-cgp-dev.org/v1"
 
@@ -91,9 +92,10 @@ def swagger():
     :return:
     """
     # FIXME replace with one hosted here
-    req = requests.get("https://gist.githubusercontent.com/david4096/6dad2ea6a4ebcff8e0fe24c2210ae8ef/raw/55bf72546923c7bd9f63f3ea72d7441b0a506a76/data_object_service.gdc.swagger.json")
-    swagger_dict = req.json()
-    swagger_dict['basePath'] = '/api'
+    req = requests.get("https://ga4gh.github.io/data-object-service-schemas/swagger/data_object_service.swagger.yaml")
+    swagger_dict = yaml.load(req.content)
+
+    swagger_dict['basePath'] = '/api/ga4gh/dos/v1'
     return swagger_dict
 
 
