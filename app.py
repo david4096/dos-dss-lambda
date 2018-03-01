@@ -113,6 +113,26 @@ def make_urls(object_id, path):
         replicas)
     return urls
 
+
+def convert_reference_json(reference_json, data_object):
+    """
+    Converts the reference JSON download from DSS into the DOS message
+    and returns the DOS message.
+    :param reference_json:
+    :param data_object:
+    :return:
+    """
+    # {u'content-type': u'application/octet-stream',
+    # u'crc32c': u'e2a2bc04',
+    # u'size': 25955827488,
+    # u'url': [u'gs://topmed-irc-share/genomes/NWD145710.b38.irc.v1.cram',
+    # u's3://nih-nhlbi-datacommons/NWD145710.b38.irc.v1.cram']}
+    data_object['size'] = reference_json['size']
+    data_object['urls'] = map(lambda x: {'url': x}, reference_json['url'])
+    data_object['checksums'] = [{'checksum': reference_json['crc32c'], 'type': 'crc32c'}]
+    data_object['content_type'] = reference_json['content-type']
+    return data_object
+
 @app.route('/ga4gh/dos/v1/dataobjects/{data_object_id}', methods=['GET'], cors=True)
 def get_data_object(data_object_id):
     """
@@ -126,16 +146,26 @@ def get_data_object(data_object_id):
     if not dss_response.status_code == 200:
         return Response({'msg': 'Data Object with data_object_id {} was not found.'.format(data_object_id)}, status_code=404)
     data_object = dss_file_to_dos(data_object_id, dss_file)
-    replicas = ['aws', 'azure', 'gcp']
-    for replica in replicas:
-        # TODO make async
+    # FIXME download the extra metadata if its a file by reference
+    content_key = 'fileref'
+    if data_object['content_type'].find(content_key) != -1:
+        reference_json = requests.get('{}/files/{}?replica=aws'.format(DSS_URL, data_object_id)).json()
         try:
-            data_bundle = requests.get(
-                "{}/bundles/{}?replica={}&directurls=true".format(DSS_URL, dss_file['X-DSS-BUNDLE-UUID'], replica))
-            url = filter(lambda x: x['uuid'] == data_object_id, data_bundle.json()['bundle']['files'])[0]['url']
-            data_object['urls'].append({'url': url})
+            data_object = convert_reference_json(reference_json, data_object)
         except Exception as e:
-            pass
+            return Response({'msg': 'Data Object with data_object_id {} was not found. {}'.format(data_object_id, str(e))},
+                            status_code=404)
+    else:
+        replicas = ['aws', 'azure', 'gcp']
+        for replica in replicas:
+            # TODO make async
+            try:
+                data_bundle = requests.get(
+                    "{}/bundles/{}?replica={}&directurls=true".format(DSS_URL, dss_file['X-DSS-BUNDLE-UUID'], replica))
+                url = filter(lambda x: x['uuid'] == data_object_id, data_bundle.json()['bundle']['files'])[0]['url']
+                data_object['urls'].append({'url': url})
+            except Exception as e:
+                pass
     return {'data_object': data_object}
 
 @app.route('/ga4gh/dos/v1/dataobjects/list', methods=['POST'], cors=True)
