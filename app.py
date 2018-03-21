@@ -14,7 +14,7 @@ from chalice import Chalice, Response
 
 DSS_URL = "https://commons-dss.ucsc-cgp-dev.org/v1"
 
-app = Chalice(app_name='dos-indexd-lambda', debug=True)
+app = Chalice(app_name='dos-dss-lambda', debug=True)
 app.log.setLevel(logging.DEBUG)
 
 
